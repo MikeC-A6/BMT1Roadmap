@@ -82,7 +82,18 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   useEffect(() => {
     if (cardsData?.cards && cardsData.cards.length > 0) {
       console.log('Loading cards from API:', cardsData.cards.length);
-      setCards(cardsData.cards);
+      
+      // Convert snake_case to camelCase for client-side
+      const convertedCards = cardsData.cards.map((card: any) => ({
+        id: card.id,
+        text: card.text,
+        location: card.location,
+        isAccent: card.is_accent,
+        githubNumber: card.github_number,
+        githubUrl: card.github_url
+      }));
+      
+      setCards(convertedCards);
       
       // Find the highest ID to set nextId properly
       const highestId = Math.max(
@@ -124,10 +135,19 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   
   // Mutation for creating a card
   const createCardMutation = useMutation({
-    mutationFn: async (card: Omit<RoadmapCard, 'id'>) => {
+    mutationFn: async (card: Omit<RoadmapCard, 'id'> & { is_accent?: boolean, github_number?: number, github_url?: string }) => {
+      // Convert camelCase to snake_case for API
+      const apiData = {
+        text: card.text,
+        location: card.location,
+        is_accent: card.isAccent || card.is_accent,
+        github_number: card.githubNumber || card.github_number,
+        github_url: card.githubUrl || card.github_url
+      };
+      
       return await apiRequest('/api/roadmap/cards', {
         method: 'POST',
-        data: card
+        data: apiData
       });
     },
     onSuccess: () => {
@@ -145,10 +165,29 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   
   // Mutation for updating a card
   const updateCardMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string, updates: Partial<RoadmapCard> }) => {
+    mutationFn: async ({ id, updates }: { id: string, updates: Partial<RoadmapCard> & { is_accent?: boolean, github_number?: number, github_url?: string } }) => {
+      // Convert camelCase to snake_case for API
+      const apiUpdates: any = { ...updates };
+      
+      // Handle specific property conversions
+      if ('isAccent' in updates) {
+        apiUpdates.is_accent = updates.isAccent;
+        delete apiUpdates.isAccent;
+      }
+      
+      if ('githubNumber' in updates) {
+        apiUpdates.github_number = updates.githubNumber;
+        delete apiUpdates.githubNumber;
+      }
+      
+      if ('githubUrl' in updates) {
+        apiUpdates.github_url = updates.githubUrl;
+        delete apiUpdates.githubUrl;
+      }
+      
       return await apiRequest(`/api/roadmap/cards/${id}`, {
         method: 'PATCH',
-        data: updates
+        data: apiUpdates
       });
     },
     onSuccess: () => {
@@ -186,10 +225,20 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   
   // Mutation for batch creating cards (for initial seeding)
   const batchCreateCardsMutation = useMutation({
-    mutationFn: async (cards: Omit<RoadmapCard, 'id'>[]) => {
+    mutationFn: async (cards: (Omit<RoadmapCard, 'id'> & { id?: string })[]) => {
+      // Convert camelCase to snake_case for API
+      const apiCards = cards.map(card => ({
+        id: card.id,
+        text: card.text,
+        location: card.location,
+        is_accent: card.isAccent,
+        github_number: card.githubNumber,
+        github_url: card.githubUrl
+      }));
+      
       return await apiRequest('/api/roadmap/cards/batch', {
         method: 'POST',
-        data: cards
+        data: apiCards
       });
     },
     onSuccess: () => {
@@ -207,10 +256,10 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   
   // Create initial cards in the database
   const createInitialCards = () => {
+    // Keep the original cards format for the API
     const cardsToCreate = initialCards.map(({ id, ...rest }) => ({
       ...rest,
-      // Keep the same ID format but ensure it's unique
-      id: id
+      id // Keep the same ID format but ensure it's unique
     }));
     
     batchCreateCardsMutation.mutate(cardsToCreate);
@@ -299,19 +348,55 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
     
     console.log(`Moving issue to roadmap: ${issue.title} to ${location.objective} ${location.column}`);
     
-    // Create a new card for this issue
-    const newCard: Omit<RoadmapCard, 'id'> = {
+    // Check if this issue is already on the roadmap
+    const existingCard = cards.find(c => c.githubNumber === issue.number);
+    if (existingCard) {
+      console.log(`Issue #${issue.number} is already on the roadmap as card ${existingCard.id}`);
+      
+      // Just update the location if it's different
+      if (existingCard.location.objective !== location.objective || 
+          existingCard.location.column !== location.column) {
+        console.log(`Updating existing card location to ${location.objective}-${location.column}`);
+        
+        // Update the card's location
+        updateCardMutation.mutate({
+          id: existingCard.id,
+          updates: { location }
+        });
+        
+        // Optimistically update UI
+        setCards(prevCards => 
+          prevCards.map(card => 
+            card.id === existingCard.id ? { ...card, location } : card
+          )
+        );
+      }
+      
+      // Remove from uncategorized regardless
+      setIssues(prevIssues => prevIssues.filter(i => i.id !== issueId));
+      return;
+    }
+    
+    // Create a new card for this issue with a dedicated ID format for GitHub issues
+    const newCardId = `github-${issue.number}`;
+    const newCard: RoadmapCard = {
+      id: newCardId,
       text: issue.title,
       location,
       githubNumber: issue.number,
       githubUrl: issue.url
     };
     
-    // Persist to database first
-    createCardMutation.mutate(newCard);
-    
     // Optimistically update UI (add to cards)
-    setCards(prevCards => [...prevCards, { ...newCard, id: issueId }]);
+    setCards(prevCards => [...prevCards, newCard]);
+    
+    // Persist to database with snake_case properties for the API
+    createCardMutation.mutate({
+      text: issue.title,
+      location,
+      github_number: issue.number,
+      github_url: issue.url
+    });
     
     // Remove from uncategorized
     setIssues(prevIssues => prevIssues.filter(i => i.id !== issueId));

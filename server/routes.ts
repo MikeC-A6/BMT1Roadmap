@@ -218,8 +218,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: z.string(),
         text: z.string(),
         location: z.any(),
+        // Support both camelCase and snake_case property names
+        isAccent: z.boolean().optional(),
         is_accent: z.boolean().optional(),
+        githubNumber: z.number().optional().nullable(),
         github_number: z.number().optional().nullable(),
+        githubUrl: z.string().optional().nullable(),
         github_url: z.string().optional().nullable()
       });
       
@@ -230,7 +234,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create cards sequentially
       const createdCards = [];
       for (const cardData of cardsData) {
-        const newCard = await storage.createRoadmapCard(cardData);
+        // Normalize data to use snake_case for database
+        const normalizedData = {
+          id: cardData.id,
+          text: cardData.text,
+          location: cardData.location,
+          is_accent: cardData.isAccent || cardData.is_accent,
+          github_number: cardData.githubNumber || cardData.github_number,
+          github_url: cardData.githubUrl || cardData.github_url
+        };
+        
+        const newCard = await storage.createRoadmapCard(normalizedData);
         createdCards.push(newCard);
       }
       
@@ -276,25 +290,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
 // Fetch GitHub issues from cache
 async function fetchGitHubIssuesFromCache(): Promise<GitHubIssue[]> {
   try {
-    // First, try to get from the database
+    // First, check for existing GitHub issues in roadmap cards
+    const roadmapCards = await storage.getAllRoadmapCards();
+    const existingGithubNumbers = new Set(
+      roadmapCards
+        .filter(card => card.github_number !== null)
+        .map(card => card.github_number!)
+    );
+    
+    console.log(`Found ${existingGithubNumbers.size} GitHub issues already on the roadmap`);
+    
+    // Get issues from database
     const dbIssues = await storage.getAllGithubIssues();
-    if (dbIssues && dbIssues.length > 0) {
-      return dbIssues.map(issue => ({
+    
+    // Filter out issues that are already on the roadmap
+    const filteredIssues = dbIssues
+      .filter(issue => !existingGithubNumbers.has(issue.number))
+      .map(issue => ({
         id: issue.id,
         number: issue.number,
         title: issue.title,
         url: issue.url,
         labels: issue.labels || []
       }));
+    
+    if (filteredIssues.length > 0) {
+      console.log(`Returning ${filteredIssues.length} GitHub issues from database (filtered from ${dbIssues.length} total)`);
+      return filteredIssues;
     }
     
     // If no database entries, check memory cache
     if (cachedGitHubIssues.length > 0) {
-      return cachedGitHubIssues;
+      // Also filter the memory cache
+      const filteredCache = cachedGitHubIssues.filter(issue => !existingGithubNumbers.has(issue.number));
+      console.log(`Returning ${filteredCache.length} GitHub issues from memory cache (filtered from ${cachedGitHubIssues.length} total)`);
+      return filteredCache;
     }
 
-    // Otherwise return mock data
-    return [
+    // Otherwise return mock data (also filtered)
+    const mockIssues = [
       { 
         id: "github-8901", 
         number: 8901, 
@@ -331,52 +365,11 @@ async function fetchGitHubIssuesFromCache(): Promise<GitHubIssue[]> {
         labels: REQUIRED_LABELS
       }
     ];
+    
+    return mockIssues.filter(issue => !existingGithubNumbers.has(issue.number));
   } catch (error) {
-    console.error("Error fetching issues from database:", error);
-    
-    // Fallback to memory cache or mock data
-    if (cachedGitHubIssues.length > 0) {
-      return cachedGitHubIssues;
-    }
-    
-    // Final fallback to mock data
-    return [
-      { 
-        id: "github-8901", 
-        number: 8901, 
-        title: "Improve claim status notification system", 
-        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8901",
-        labels: REQUIRED_LABELS
-      },
-      { 
-        id: "github-8902", 
-        number: 8902, 
-        title: "Fix accessibility issues in claim form", 
-        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8902",
-        labels: REQUIRED_LABELS
-      },
-      { 
-        id: "github-8903", 
-        number: 8903, 
-        title: "Optimize claim document storage", 
-        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8903",
-        labels: REQUIRED_LABELS
-      },
-      { 
-        id: "github-8904", 
-        number: 8904, 
-        title: "Add support for dependent claims", 
-        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8904",
-        labels: REQUIRED_LABELS
-      },
-      { 
-        id: "github-8905", 
-        number: 8905, 
-        title: "Implement new VA design system components", 
-        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8905",
-        labels: REQUIRED_LABELS
-      }
-    ];
+    console.error("Error fetching GitHub issues from cache:", error);
+    return [];
   }
 }
 
