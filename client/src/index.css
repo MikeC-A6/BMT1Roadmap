@@ -89,6 +89,23 @@
     @apply min-h-[60px] h-full;
   }
   
+  .card[data-priority="true"] {
+    @apply shadow-md shadow-red-200;
+  }
+  
+  .card[data-priority="true"]::before {
+    content: "";
+    @apply absolute top-0 left-0 w-full h-1 bg-red-500 rounded-t;
+  }
+  
+  .priority-indicator {
+    @apply z-20;
+  }
+  
+  .priority-indicator:hover .priority-bar {
+    @apply h-3 shadow-sm;
+  }
+  
   .card textarea {
     @apply focus:outline-none focus:ring-0 focus:border-0;
     background-color: inherit;

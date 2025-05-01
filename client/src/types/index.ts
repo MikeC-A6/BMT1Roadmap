@@ -25,6 +25,7 @@ export interface RoadmapCard {
   text: string;
   location: CardLocation;
   isAccent?: boolean;
+  isHighPriority?: boolean;
   githubNumber?: number;
   githubUrl?: string;
 }

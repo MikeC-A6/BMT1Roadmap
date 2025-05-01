@@ -89,6 +89,7 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
         text: card.text,
         location: card.location,
         isAccent: card.is_accent,
+        isHighPriority: card.is_high_priority,
         githubNumber: card.github_number,
         githubUrl: card.github_url
       }));
@@ -173,6 +174,11 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
       if ('isAccent' in updates) {
         apiUpdates.is_accent = updates.isAccent;
         delete apiUpdates.isAccent;
+      }
+      
+      if ('isHighPriority' in updates) {
+        apiUpdates.is_high_priority = updates.isHighPriority;
+        delete apiUpdates.isHighPriority;
       }
       
       if ('githubNumber' in updates) {
@@ -288,11 +294,63 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   
   // Handler for deleting a card
   const handleDeleteCard = (cardId: string) => {
-    // Optimistically update UI
-    setCards(prevCards => prevCards.filter(card => card.id !== cardId));
+    // Find the card to check if it's a GitHub issue
+    const cardToDelete = cards.find(card => card.id === cardId);
     
-    // Persist to database
-    deleteCardMutation.mutate(cardId);
+    if (cardToDelete && cardToDelete.githubNumber) {
+      // This is a GitHub issue card - move it back to uncategorized instead of deleting
+      console.log(`Moving GitHub issue #${cardToDelete.githubNumber} back to uncategorized section`);
+      
+      // Optimistically update UI: remove from cards
+      setCards(prevCards => prevCards.filter(card => card.id !== cardId));
+      
+      // Add the issue back to the uncategorized section
+      const issueToRestore: GitHubIssue = {
+        id: cardToDelete.id, // Keep the original ID format for consistency
+        number: cardToDelete.githubNumber,
+        title: cardToDelete.text,
+        url: cardToDelete.githubUrl || '',
+        labels: []
+      };
+      
+      // Add back to uncategorized issues
+      setIssues(prevIssues => {
+        // Check if this issue already exists in the list to avoid duplicates
+        const exists = prevIssues.some(i => i.number === issueToRestore.number);
+        if (exists) {
+          return prevIssues;
+        }
+        return [...prevIssues, issueToRestore];
+      });
+      
+      // Delete the card from the database
+      deleteCardMutation.mutate(cardId);
+    } else {
+      // Regular card - just delete it
+      // Optimistically update UI
+      setCards(prevCards => prevCards.filter(card => card.id !== cardId));
+      
+      // Persist to database
+      deleteCardMutation.mutate(cardId);
+    }
+  };
+  
+  // Handler for toggling high priority status
+  const handleTogglePriority = (cardId: string, isHighPriority: boolean) => {
+    console.log(`Toggling priority for card ${cardId} to ${isHighPriority}`);
+    
+    // Optimistically update UI
+    setCards(prevCards => 
+      prevCards.map(card => 
+        card.id === cardId ? { ...card, isHighPriority } : card
+      )
+    );
+    
+    // Persist to database (convert camelCase to snake_case for API)
+    updateCardMutation.mutate({ 
+      id: cardId, 
+      updates: { isHighPriority } 
+    });
   };
   
   // Handler for updating card text
@@ -442,6 +500,7 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
               onMoveCard={handleMoveCard}
+              onTogglePriority={handleTogglePriority}
               className="col-span-1"
             />
             
@@ -455,6 +514,7 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
               onMoveCard={handleMoveCard}
+              onTogglePriority={handleTogglePriority}
               className="col-span-1"
             />
             
@@ -468,6 +528,7 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
               onMoveCard={handleMoveCard}
+              onTogglePriority={handleTogglePriority}
               className="col-span-2"
             />
           </div>

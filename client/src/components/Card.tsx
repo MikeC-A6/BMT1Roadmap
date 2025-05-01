@@ -9,11 +9,13 @@ interface CardProps {
   onUpdate: (id: string, text: string) => void;
   onAddBelow: (id: string) => void;
   onMove?: (id: string, location: CardLocation) => void;
+  onTogglePriority?: (id: string, isHighPriority: boolean) => void;
 }
 
-export default function Card({ card, onDelete, onUpdate, onAddBelow, onMove }: CardProps) {
+export default function Card({ card, onDelete, onUpdate, onAddBelow, onMove, onTogglePriority }: CardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [displayText, setDisplayText] = useState(card.text);
+  const [isHoveringTop, setIsHoveringTop] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Is this a GitHub issue card?
@@ -107,17 +109,65 @@ export default function Card({ card, onDelete, onUpdate, onAddBelow, onMove }: C
     return null;
   };
   
+  // Toggle priority status
+  const handleTogglePriority = () => {
+    if (onTogglePriority) {
+      onTogglePriority(card.id, !card.isHighPriority);
+    }
+  };
+  
+  // Handle mouse over for priority indicator
+  const handleMouseEnterTop = () => {
+    if (!isEditing) {
+      setIsHoveringTop(true);
+    }
+  };
+  
+  const handleMouseLeaveTop = () => {
+    setIsHoveringTop(false);
+  };
+  
   return (
     <div
       ref={drag}
-      className={`card ${isDragging ? 'opacity-40' : ''} ${card.text === '' ? 'min-h-[60px]' : ''} ${isGitHubIssue ? 'github-issue' : ''}`}
+      className={`card relative ${isDragging ? 'opacity-40' : ''} ${card.text === '' ? 'min-h-[60px]' : ''} ${isGitHubIssue ? 'github-issue' : ''}`}
       data-accent={card.isAccent}
       data-github={isGitHubIssue}
+      data-priority={card.isHighPriority}
       style={{ opacity: isDragging ? 0.4 : 1 }}
       onDoubleClick={handleDoubleClick}
       draggable={!isEditing}
       id={card.id}
     >
+      {/* Priority indicator/trigger region */}
+      <div 
+        className={`priority-indicator absolute top-0 left-0 right-0 h-6 cursor-pointer flex items-center justify-center -mt-4 transition-opacity ${isHoveringTop || card.isHighPriority ? 'opacity-100' : 'opacity-0'}`}
+        onMouseEnter={handleMouseEnterTop}
+        onMouseLeave={handleMouseLeaveTop}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleTogglePriority();
+        }}
+      >
+        <div 
+          className={`priority-bar h-2 w-24 rounded-t-md transition-all ${card.isHighPriority ? 'bg-red-500' : 'bg-gray-300'}`}
+          title={card.isHighPriority ? "Remove high priority" : "Mark as high priority"}
+        >
+          {isHoveringTop && (
+            <div className="absolute top-0 left-0 right-0 w-full flex justify-center pt-2 whitespace-nowrap">
+              <span className="text-xs bg-black text-white px-2 py-1 rounded shadow-sm">
+                {card.isHighPriority ? "Remove priority" : "Mark as high priority"}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Priority border if card is high priority */}
+      {card.isHighPriority && (
+        <div className="priority-border absolute -top-1 -left-1 -right-1 h-1 bg-red-500 rounded-t-md"></div>
+      )}
+      
       {/* Only one of these two blocks will render, never both */}
       {isEditing ? (
         /* Edit Mode: textarea */

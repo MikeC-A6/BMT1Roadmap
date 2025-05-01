@@ -10,10 +10,11 @@ interface CellProps {
   onDeleteCard: (id: string) => void;
   onUpdateCardText: (id: string, text: string) => void;
   onMoveCard: (id: string, newLocation: CardLocation) => void;
+  onTogglePriority: (id: string, isHighPriority: boolean) => void;
   className?: string;
 }
 
-export default function Cell({ cards, location, onAddCard, onDeleteCard, onUpdateCardText, onMoveCard, className = "" }: CellProps) {
+export default function Cell({ cards, location, onAddCard, onDeleteCard, onUpdateCardText, onMoveCard, onTogglePriority, className = "" }: CellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const newCardRef = useRef<HTMLDivElement>(null);
@@ -98,6 +99,7 @@ export default function Cell({ cards, location, onAddCard, onDeleteCard, onUpdat
               onUpdate={onUpdateCardText}
               onAddBelow={handleAddCardBelow}
               onMove={(id, newLocation) => onMoveCard(id, newLocation)}
+              onTogglePriority={onTogglePriority}
             />
           </div>
         ))}
