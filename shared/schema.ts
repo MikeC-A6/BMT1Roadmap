@@ -32,6 +32,7 @@ export const roadmapCards = pgTable("roadmap_cards", {
   text: text("text").notNull(),
   location: jsonb("location").notNull(),
   is_accent: boolean("is_accent").default(false),
+  is_high_priority: boolean("is_high_priority").default(false),
   github_number: integer("github_number"),
   github_url: text("github_url"),
 });
