@@ -2,11 +2,37 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import fetch from "node-fetch";
+import type { Response as NodeFetchResponse } from "node-fetch";
 
 // GitHub API endpoints
 const GITHUB_API_URL = "https://api.github.com/graphql";
 const GITHUB_REPO = "department-of-veterans-affairs/va.gov-team";
 const REQUIRED_LABELS = ["benefits-management-tools", "bmt-2025", "bmt-team-1"];
+
+// Extra helper function to test basic GitHub API access
+async function testGitHubApiAccess(token: string): Promise<void> {
+  try {
+    console.log("Testing basic GitHub API access...");
+    
+    // Try to access the repository via REST API to verify it exists
+    const repoResponse = await fetch(`https://api.github.com/repos/${GITHUB_REPO}`, {
+      headers: {
+        "Authorization": `token ${token}`,
+        "Accept": "application/vnd.github.v3+json"
+      }
+    });
+    
+    const repoData = await repoResponse.json();
+    
+    if (repoResponse.ok) {
+      console.log(`Repository verification: Found "${repoData.full_name}" (${repoData.visibility})`);
+    } else {
+      console.error(`Repository verification failed: ${repoData.message}`);
+    }
+  } catch (error) {
+    console.error("Error testing GitHub API access:", error);
+  }
+}
 
 interface GitHubIssue {
   id: string;
@@ -16,12 +42,16 @@ interface GitHubIssue {
   labels: string[];
 }
 
+// Add a variable to store cached issues
+let cachedGitHubIssues: GitHubIssue[] = [];
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint to get cached GitHub issues
   app.get("/api/github/issues", async (req, res) => {
     try {
       // Return currently cached issues
       const issues = await fetchGitHubIssuesFromCache();
+      console.log(`Returning ${issues.length} cached GitHub issues (${cachedGitHubIssues.length} in memory)`);
       return res.json({ issues });
     } catch (error) {
       console.error("Error fetching cached GitHub issues:", error);
@@ -35,6 +65,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/github/issues/refresh", async (req, res) => {
     try {
       const issues = await fetchGitHubIssuesFromApi();
+      // Update the cached issues after successful fetch
+      cachedGitHubIssues = issues;
       return res.json({ message: "GitHub issues refreshed successfully", count: issues.length });
     } catch (error) {
       console.error("Error refreshing GitHub issues:", error);
@@ -44,14 +76,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Initialize by loading issues at startup
+  try {
+    console.log("Initializing: fetching GitHub issues at startup");
+    const initialIssues = await fetchGitHubIssuesFromApi();
+    cachedGitHubIssues = initialIssues;
+    console.log(`Initialization complete: loaded ${initialIssues.length} GitHub issues`);
+  } catch (error) {
+    console.error("Error pre-loading GitHub issues:", error);
+  }
+
   const httpServer = createServer(app);
   return httpServer;
 }
 
 // Fetch GitHub issues from cache
 async function fetchGitHubIssuesFromCache(): Promise<GitHubIssue[]> {
-  // In a full implementation, we would fetch from database
-  // For now, using a simulated cache
+  // Return real cached issues if available
+  if (cachedGitHubIssues.length > 0) {
+    return cachedGitHubIssues;
+  }
+
+  // Otherwise return mock data
   return [
     { 
       id: "github-8901", 
@@ -101,33 +147,50 @@ async function fetchGitHubIssuesFromApi(): Promise<GitHubIssue[]> {
     return fetchGitHubIssuesFromCache(); // Fallback to cache in dev mode
   }
   
+  // Log partial token for debugging (masking most of it for security)
+  if (token.length > 10) {
+    console.log(`Using GitHub token: ${token.substring(0, 4)}...${token.substring(token.length - 4)} (length: ${token.length})`);
+  } else {
+    console.warn("GitHub token seems too short, might be truncated");
+  }
+  
+  // Test basic GitHub API access first
+  await testGitHubApiAccess(token);
+  
   let allIssues: GitHubIssue[] = [];
-  let hasNextPage = true;
-  let endCursor: string | null = null;
   
   try {
-    // Construct query with all required labels
-    const labelsQuery = REQUIRED_LABELS.map(label => `label:${label}`).join(" ");
+    // Exactly as used in the GraphQL Explorer
+    const searchQuery = 'repo:department-of-veterans-affairs/va.gov-team is:issue is:open label:"benefits-management-tools" label:"bmt-2025" label:"bmt-team-1"';
+    
+    console.log(`Using search query: ${searchQuery}`);
+    
+    let hasNextPage = true;
+    let cursor: string | null = null;
     
     // Continue fetching with pagination until all results are retrieved
     while (hasNextPage) {
-      // Add the "after" parameter if we have an endCursor
-      const afterParam = endCursor ? `, after: "${endCursor}"` : '';
+      const variables = {
+        cursor: cursor,
+        searchQuery: searchQuery
+      };
       
       const query = `
-        query {
-          search(query: "repo:${GITHUB_REPO} is:open ${labelsQuery}", type: ISSUE, first: 100${afterParam}) {
+        query BmtAllThree($cursor: String, $searchQuery: String!) {
+          search(
+            type: ISSUE
+            first: 100
+            after: $cursor
+            query: $searchQuery
+          ) {
             edges {
               node {
                 ... on Issue {
-                  id
                   number
                   title
                   url
                   labels(first: 10) {
-                    nodes {
-                      name
-                    }
+                    nodes { name }
                   }
                 }
               }
@@ -140,26 +203,36 @@ async function fetchGitHubIssuesFromApi(): Promise<GitHubIssue[]> {
         }
       `;
       
-      console.log(`Fetching GitHub issues${endCursor ? ' (paginated)' : ''}`);
+      console.log(`Fetching GitHub issues${cursor ? ' (paginated)' : ''}`);
       
-      const response = await fetch(GITHUB_API_URL, {
+      const response: NodeFetchResponse = await fetch(GITHUB_API_URL, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({
+          query,
+          variables
+        })
       });
       
-      const data = await response.json();
+      const data: any = await response.json();
+      
+      // Log response for debugging
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('GitHub API response status:', response.status);
+        console.log('GitHub API response structure:', 
+          JSON.stringify(data, null, 2).substring(0, 1000) + '...');
+      }
       
       if (data.errors) {
         console.error("GitHub API returned errors:", data.errors);
         throw new Error(data.errors[0].message);
       }
       
-      // Transform the response into our GitHubIssue format
-      const issuesFromPage: GitHubIssue[] = data.data.search.edges.map((edge: any) => {
+      // Transform the response into GitHubIssue format
+      const issuesFromPage: GitHubIssue[] = (data.data?.search?.edges || []).map((edge: any) => {
         const node = edge.node;
         return {
           id: `github-${node.number}`,
@@ -174,8 +247,8 @@ async function fetchGitHubIssuesFromApi(): Promise<GitHubIssue[]> {
       allIssues = [...allIssues, ...issuesFromPage];
       
       // Check if there are more pages
-      hasNextPage = data.data.search.pageInfo.hasNextPage;
-      endCursor = data.data.search.pageInfo.endCursor;
+      hasNextPage = data.data?.search?.pageInfo?.hasNextPage || false;
+      cursor = data.data?.search?.pageInfo?.endCursor || null;
       
       // If we've received issues, log the count
       if (issuesFromPage.length > 0) {
@@ -187,9 +260,6 @@ async function fetchGitHubIssuesFromApi(): Promise<GitHubIssue[]> {
     }
     
     console.log(`Total GitHub issues fetched: ${allIssues.length}`);
-    
-    // In a full implementation, save to cache/database
-    // ...
     
     return allIssues;
   } catch (error) {

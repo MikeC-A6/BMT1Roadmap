@@ -97,6 +97,17 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   
   // Handler for moving a card to a new location
   const handleMoveCard = (cardId: string, newLocation: CardLocation) => {
+    console.log(`RoadmapBoard: Moving card ${cardId} to ${newLocation.objective}-${newLocation.column}`);
+    
+    // Check if this is an uncategorized issue being moved
+    const issue = issues.find(i => i.id === cardId);
+    if (issue) {
+      // This is a GitHub issue from uncategorized section
+      handleMoveIssueToRoadmap(cardId, newLocation);
+      return;
+    }
+    
+    // Otherwise, it's a normal card movement
     setCards(prevCards => 
       prevCards.map(card => 
         card.id === cardId ? { ...card, location: newLocation } : card
@@ -107,11 +118,16 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   // Handler for moving a GitHub issue to the roadmap
   const handleMoveIssueToRoadmap = (issueId: string, location: CardLocation) => {
     const issue = issues.find(i => i.id === issueId);
-    if (!issue) return;
+    if (!issue) {
+      console.log(`Issue not found: ${issueId}`);
+      return;
+    }
+    
+    console.log(`Moving issue to roadmap: ${issue.title} to ${location.objective} ${location.column}`);
     
     // Create a new card for this issue
     const newCard: RoadmapCard = {
-      id: `github-${issue.number}`,
+      id: issueId, // Keep the same ID for consistent tracking
       text: issue.title,
       location,
       githubNumber: issue.number,
@@ -148,10 +164,11 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               cards={cards.filter(
                 card => card.location.objective === objective.id && card.location.column === "now"
               )}
+              location={{ objective: objective.id, column: "now" }}
               onAddCard={(text) => handleAddCard(objective.id, "now", text)}
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
-              onMoveCard={(cardId) => handleMoveCard(cardId, { objective: objective.id, column: "now" })}
+              onMoveCard={handleMoveCard}
             />
             
             {/* Next column */}
@@ -159,10 +176,11 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               cards={cards.filter(
                 card => card.location.objective === objective.id && card.location.column === "next"
               )}
+              location={{ objective: objective.id, column: "next" }}
               onAddCard={(text) => handleAddCard(objective.id, "next", text)}
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
-              onMoveCard={(cardId) => handleMoveCard(cardId, { objective: objective.id, column: "next" })}
+              onMoveCard={handleMoveCard}
             />
             
             {/* Later column */}
@@ -170,10 +188,11 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               cards={cards.filter(
                 card => card.location.objective === objective.id && card.location.column === "later"
               )}
+              location={{ objective: objective.id, column: "later" }}
               onAddCard={(text) => handleAddCard(objective.id, "later", text)}
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
-              onMoveCard={(cardId) => handleMoveCard(cardId, { objective: objective.id, column: "later" })}
+              onMoveCard={handleMoveCard}
             />
           </div>
         ))}

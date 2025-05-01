@@ -1,26 +1,58 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDrag } from "react-dnd";
-import { RoadmapCard } from "@/types";
+import { RoadmapCard, CardLocation } from "@/types";
 
 interface CardProps {
   card: RoadmapCard;
   onDelete: (id: string) => void;
   onUpdate: (id: string, text: string) => void;
   onAddBelow: (id: string) => void;
+  onMove?: (id: string, location: CardLocation) => void;
 }
 
-export default function Card({ card, onDelete, onUpdate, onAddBelow }: CardProps) {
+export default function Card({ card, onDelete, onUpdate, onAddBelow, onMove }: CardProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const [displayText, setDisplayText] = useState(card.text);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Update display text when card.text changes
+  useEffect(() => {
+    setDisplayText(card.text);
+  }, [card.text]);
+  
+  // Focus and select all text when entering edit mode
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      
+      // For new cards, just focus without selecting
+      if (card.text !== "") {
+        textareaRef.current.select();
+      }
+    }
+  }, [isEditing, card.text]);
   
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "CARD",
     item: { id: card.id },
+    end: (item, monitor) => {
+      const dropResult = monitor.getDropResult<{ dropped: boolean, location: CardLocation }>();
+      if (onMove && dropResult && dropResult.dropped && dropResult.location) {
+        // Only move if the drop location is different from the current location
+        const currentLoc = card.location;
+        const newLoc = dropResult.location;
+        
+        if (currentLoc.objective !== newLoc.objective || currentLoc.column !== newLoc.column) {
+          console.log(`Card ${card.id} moved to ${newLoc.objective}-${newLoc.column}`);
+          onMove(card.id, newLoc);
+        }
+      }
+    },
     collect: monitor => ({
       isDragging: monitor.isDragging(),
     }),
     canDrag: !isEditing,
-  }));
+  }), [card.id, card.location, onMove, isEditing]);
   
   const handleDoubleClick = () => {
     // GitHub issue cards are not directly editable
@@ -30,14 +62,17 @@ export default function Card({ card, onDelete, onUpdate, onAddBelow }: CardProps
   };
   
   const handleBlur = () => {
-    if (cardRef.current) {
-      const text = cardRef.current.textContent || "";
-      if (text.trim() === "") {
-        onDelete(card.id);
-      } else {
-        onUpdate(card.id, text);
-      }
+    if (!textareaRef.current) return;
+    
+    const newText = textareaRef.current.value.trim();
+    
+    if (newText === "") {
+      onDelete(card.id);
+    } else {
+      onUpdate(card.id, newText);
+      setDisplayText(newText);
     }
+    
     setIsEditing(false);
   };
   
@@ -45,14 +80,12 @@ export default function Card({ card, onDelete, onUpdate, onAddBelow }: CardProps
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (cardRef.current) {
-        cardRef.current.blur();
-      }
+      handleBlur();
     }
   };
   
-  // Set the card content based on whether it's a GitHub issue or regular card
-  const renderCardContent = () => {
+  // Get GitHub issue content
+  const renderGitHubIssue = () => {
     if (card.githubNumber && card.githubUrl) {
       return (
         <a 
@@ -66,54 +99,66 @@ export default function Card({ card, onDelete, onUpdate, onAddBelow }: CardProps
         </a>
       );
     }
-    
-    return card.text;
+    return null;
   };
   
   return (
     <div
-      ref={(node) => {
-        drag(node);
-        if (node) cardRef.current = node;
-      }}
-      className={`card ${isDragging ? 'opacity-40' : ''}`}
+      ref={drag}
+      className={`card ${isDragging ? 'opacity-40' : ''} ${card.text === '' ? 'min-h-[60px]' : ''}`}
       data-accent={card.isAccent}
       style={{ opacity: isDragging ? 0.4 : 1 }}
       onDoubleClick={handleDoubleClick}
-      contentEditable={isEditing}
-      suppressContentEditableWarning={true}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
       draggable={!isEditing}
+      id={card.id}
     >
-      {renderCardContent()}
-      
-      {!isEditing && (
+      {/* Only one of these two blocks will render, never both */}
+      {isEditing ? (
+        /* Edit Mode: textarea */
+        <textarea
+          ref={textareaRef}
+          className="w-full h-full p-0 bg-transparent border-none outline-none resize-none font-inherit"
+          defaultValue={displayText}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          style={{ 
+            fontFamily: 'inherit', 
+            fontSize: 'inherit',
+            fontWeight: 'inherit',
+            minHeight: '40px'
+          }}
+        />
+      ) : (
+        /* Display Mode: static text */
         <>
-          <button 
-            className="card-action action-delete" 
-            title="Delete"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(card.id);
-            }}
-          >
-            −
-          </button>
+          {card.githubNumber ? renderGitHubIssue() : displayText}
           
-          {/* Only regular cards have the add-below button */}
-          {!card.githubNumber && (
+          <div className="card-actions flex flex-col gap-2 absolute top-1 right-1">
             <button 
-              className="card-action action-add" 
-              title="Add sticky below"
+              className="card-action action-delete" 
+              title="Delete"
               onClick={(e) => {
                 e.stopPropagation();
-                onAddBelow(card.id);
+                onDelete(card.id);
               }}
             >
-              +
+              −
             </button>
-          )}
+            
+            {/* Only regular cards have the add-below button */}
+            {!card.githubNumber && (
+              <button 
+                className="card-action action-add" 
+                title="Add sticky below"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddBelow(card.id);
+                }}
+              >
+                +
+              </button>
+            )}
+          </div>
         </>
       )}
     </div>

@@ -13,7 +13,17 @@ function IssueCard({ issue, onMoveIssue }: {
 }) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "CARD",
-    item: { id: issue.id },
+    item: { 
+      id: issue.id,
+      fromUncategorized: true
+    },
+    end: (item, monitor) => {
+      const dropResult = monitor.getDropResult<{ dropped: boolean, location: CardLocation }>();
+      if (dropResult && dropResult.dropped && dropResult.location) {
+        console.log(`End drag for issue ${issue.id} - dropped at ${dropResult.location.objective}-${dropResult.location.column}`);
+        onMoveIssue(issue.id, dropResult.location);
+      }
+    },
     collect: monitor => ({
       isDragging: monitor.isDragging(),
     }),
