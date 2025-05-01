@@ -68,7 +68,7 @@
 
 @layer components {
   .cell {
-    @apply relative flex flex-col gap-3.5 min-h-[120px] rounded-md transition-all duration-150 ease-in-out;
+    @apply relative min-h-[120px] rounded-md transition-all duration-150 ease-in-out p-3;
   }
   
   .cell.drop-target {
@@ -83,7 +83,7 @@
   .card {
     @apply bg-[hsl(var(--va-note))] p-4 rounded-md shadow-md font-semibold relative cursor-grab;
     @apply transition-transform duration-150 ease-in-out hover:translate-y-[-3px] hover:scale-[1.02] hover:shadow-lg;
-    @apply min-h-[60px];
+    @apply min-h-[60px] h-full;
   }
   
   .card textarea {
@@ -135,5 +135,24 @@
     @apply relative w-full h-full;
     mask-image: radial-gradient(circle at center, black 30%, rgba(0,0,0,0.3) 60%, transparent 80%);
     -webkit-mask-image: radial-gradient(circle at center, black 30%, rgba(0,0,0,0.3) 60%, transparent 80%);
+  }
+}
+
+/* Ensure "Now" and "Next" columns always have single-column layout */
+[class*="col-span-1"] .grid {
+  grid-template-columns: 1fr !important;
+}
+
+/* Ensure "Later" column has two-column layout on larger screens */
+@media (min-width: 768px) {
+  .col-span-2 .grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Force single-column layout on mobile for all columns */
+@media (max-width: 767px) {
+  .grid {
+    grid-template-columns: 1fr !important;
   }
 }

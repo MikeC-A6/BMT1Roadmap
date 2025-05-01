@@ -413,20 +413,20 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
         </div>
       )}
 
-      <div id="roadmap" className="grid gap-5">
+      <div id="roadmap" className="grid gap-5 mx-auto max-w-full">
         {/* Headers Row */}
-        <div className="grid grid-cols-4 gap-5">
-          <div></div>
-          <div className="header-col">Now</div>
-          <div className="header-col">Next</div>
-          <div className="header-col">Later</div>
+        <div className="grid grid-cols-5 gap-5">
+          <div className="col-span-1"></div>
+          <div className="header-col col-span-1">Now</div>
+          <div className="header-col col-span-1">Next</div>
+          <div className="header-col col-span-2">Later</div>
         </div>
         
         {/* Objective Rows */}
         {objectives.map(objective => (
-          <div key={objective.id} className="grid grid-cols-4 gap-5">
+          <div key={objective.id} className="grid grid-cols-5 gap-5">
             <div 
-              className="objective"
+              className="objective col-span-1"
               dangerouslySetInnerHTML={{ __html: objective.text }}
             />
             
@@ -440,6 +440,7 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
               onMoveCard={handleMoveCard}
+              className="col-span-1"
             />
             
             {/* Next column */}
@@ -452,9 +453,10 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
               onMoveCard={handleMoveCard}
+              className="col-span-1"
             />
             
-            {/* Later column */}
+            {/* Later column (double width) */}
             <Cell 
               cards={cards.filter(
                 card => card.location.objective === objective.id && card.location.column === "later"
@@ -464,6 +466,7 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
               onDeleteCard={handleDeleteCard}
               onUpdateCardText={handleUpdateCardText}
               onMoveCard={handleMoveCard}
+              className="col-span-2"
             />
           </div>
         ))}

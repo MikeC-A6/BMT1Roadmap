@@ -10,12 +10,16 @@ interface CellProps {
   onDeleteCard: (id: string) => void;
   onUpdateCardText: (id: string, text: string) => void;
   onMoveCard: (id: string, newLocation: CardLocation) => void;
+  className?: string;
 }
 
-export default function Cell({ cards, location, onAddCard, onDeleteCard, onUpdateCardText, onMoveCard }: CellProps) {
+export default function Cell({ cards, location, onAddCard, onDeleteCard, onUpdateCardText, onMoveCard, className = "" }: CellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const newCardRef = useRef<HTMLDivElement>(null);
+  
+  // Determine if this cell is in the "Later" column which should have 2 columns
+  const isLaterColumn = location.column === "later";
   
   const [{ isOver }, drop] = useDrop(() => ({
     accept: "CARD",
@@ -81,20 +85,23 @@ export default function Cell({ cards, location, onAddCard, onDeleteCard, onUpdat
   return (
     <div 
       ref={drop} 
-      className={`cell ${isOver || (isEmpty && isHovering) ? 'drop-target' : ''}`}
+      className={`cell ${isOver || (isEmpty && isHovering) ? 'drop-target' : ''} ${className}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {cards.map((card, index) => (
-        <Card
-          key={card.id}
-          card={card}
-          onDelete={onDeleteCard}
-          onUpdate={onUpdateCardText}
-          onAddBelow={handleAddCardBelow}
-          onMove={(id, newLocation) => onMoveCard(id, newLocation)}
-        />
-      ))}
+      <div className={`grid ${isLaterColumn ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-3`}>
+        {cards.map((card, index) => (
+          <div key={card.id} className="h-full">
+            <Card
+              card={card}
+              onDelete={onDeleteCard}
+              onUpdate={onUpdateCardText}
+              onAddBelow={handleAddCardBelow}
+              onMove={(id, newLocation) => onMoveCard(id, newLocation)}
+            />
+          </div>
+        ))}
+      </div>
       
       {isEmpty && isHovering && (
         <button 
