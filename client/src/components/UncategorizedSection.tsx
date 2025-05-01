@@ -1,5 +1,6 @@
 import { useDrag } from "react-dnd";
 import { GitHubIssue, CardLocation } from "@/types";
+import GitHubLogo from "./GitHubLogo";
 
 interface UncategorizedSectionProps {
   issues: GitHubIssue[];
@@ -38,12 +39,13 @@ function IssueCard({ issue, onMoveIssue }: {
     >
       <a 
         href={issue.url} 
-        className="text-[hsl(var(--va-blue-lighter))] hover:underline"
+        className="text-[hsl(var(--va-blue-lighter))] hover:underline flex items-start"
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
       >
-        {issue.title} #{issue.number}
+        <GitHubLogo />
+        <span>{issue.title} #{issue.number}</span>
       </a>
       
       <button 

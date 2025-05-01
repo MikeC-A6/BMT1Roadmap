@@ -21,6 +21,7 @@ export interface IStorage {
   // GitHub issues methods
   saveGithubIssues(issues: InsertGithubIssue[]): Promise<GithubIssue[]>;
   getAllGithubIssues(): Promise<GithubIssue[]>;
+  getLatestGithubIssue(): Promise<GithubIssue | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -101,6 +102,16 @@ export class DatabaseStorage implements IStorage {
   
   async getAllGithubIssues(): Promise<GithubIssue[]> {
     return await db.select().from(githubIssues);
+  }
+  
+  async getLatestGithubIssue(): Promise<GithubIssue | undefined> {
+    const [latestIssue] = await db
+      .select()
+      .from(githubIssues)
+      .orderBy(desc(githubIssues.fetched_at))
+      .limit(1);
+    
+    return latestIssue;
   }
 }
 

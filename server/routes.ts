@@ -53,8 +53,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Return currently cached issues
       const issues = await fetchGitHubIssuesFromCache();
-      console.log(`Returning ${issues.length} cached GitHub issues (${cachedGitHubIssues.length} in memory)`);
-      return res.json({ issues });
+      
+      // Get the most recent fetch timestamp
+      const latestIssue = await storage.getLatestGithubIssue();
+      const lastRefreshed = latestIssue ? latestIssue.fetched_at : null;
+      
+      console.log(`Returning ${issues.length} cached GitHub issues (${cachedGitHubIssues.length} in memory), last refreshed: ${lastRefreshed || 'never'}`);
+      return res.json({ 
+        issues,
+        lastRefreshed
+      });
     } catch (error) {
       console.error("Error fetching cached GitHub issues:", error);
       return res.status(500).json({ 
@@ -66,18 +74,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint to refresh GitHub issues
   app.get("/api/github/issues/refresh", async (req, res) => {
     try {
+      console.log("Manual refresh requested: Fetching GitHub issues from API");
       const issues = await fetchGitHubIssuesFromApi();
+      
       // Update the cached issues after successful fetch
       cachedGitHubIssues = issues;
       
-      // Store issues in the database
+      // Store issues in the database with current timestamp
+      const currentTime = new Date().toISOString();
       const issuesToStore = issues.map(issue => ({
         ...issue,
-        fetched_at: new Date().toISOString()
+        fetched_at: currentTime
       }));
+      
       await storage.saveGithubIssues(issuesToStore);
       
-      return res.json({ message: "GitHub issues refreshed successfully", count: issues.length });
+      return res.json({ 
+        message: "GitHub issues refreshed successfully", 
+        count: issues.length,
+        lastRefreshed: currentTime
+      });
     } catch (error) {
       console.error("Error refreshing GitHub issues:", error);
       return res.status(500).json({ 
@@ -265,22 +281,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Initialize by loading issues at startup
+  // Initialize by loading issues from database only at startup, without GitHub API call
   try {
-    console.log("Initializing: fetching GitHub issues at startup");
-    const initialIssues = await fetchGitHubIssuesFromApi();
-    cachedGitHubIssues = initialIssues;
-    
-    // Store issues in the database
-    const issuesToStore = initialIssues.map(issue => ({
-      ...issue,
-      fetched_at: new Date().toISOString()
+    console.log("Initializing: loading GitHub issues from database cache");
+    const dbIssues = await storage.getAllGithubIssues();
+    cachedGitHubIssues = dbIssues.map(issue => ({
+      id: issue.id,
+      number: issue.number,
+      title: issue.title,
+      url: issue.url,
+      labels: issue.labels || []
     }));
     
-    await storage.saveGithubIssues(issuesToStore);
-    console.log(`Initialization complete: loaded ${initialIssues.length} GitHub issues`);
+    console.log(`Initialization complete: loaded ${cachedGitHubIssues.length} GitHub issues from database`);
   } catch (error) {
-    console.error("Error pre-loading GitHub issues:", error);
+    console.error("Error loading GitHub issues from database:", error);
+    cachedGitHubIssues = []; // Initialize with empty array on error
   }
 
   const httpServer = createServer(app);
