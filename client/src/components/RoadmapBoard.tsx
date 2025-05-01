@@ -403,7 +403,7 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
   };
   
   return (
-    <main className="max-w-7xl mx-auto">
+    <main className="max-w-7xl mx-auto pt-4">
       {isLoadingCards && (
         <div className="flex justify-center items-center p-8">
           <div className="animate-pulse text-center">
@@ -414,12 +414,14 @@ export default function RoadmapBoard({ initialIssues, isLoading }: RoadmapBoardP
       )}
 
       <div id="roadmap" className="grid gap-5 mx-auto max-w-full">
-        {/* Headers Row */}
-        <div className="grid grid-cols-5 gap-5">
-          <div className="col-span-1"></div>
-          <div className="header-col col-span-1">Now</div>
-          <div className="header-col col-span-1">Next</div>
-          <div className="header-col col-span-2">Later</div>
+        {/* Headers Row - Sticky */}
+        <div className="sticky-column-headers">
+          <div className="grid grid-cols-5 gap-5">
+            <div className="col-span-1"></div>
+            <div className="header-col col-span-1">Now</div>
+            <div className="header-col col-span-1">Next</div>
+            <div className="header-col col-span-2">Later</div>
+          </div>
         </div>
         
         {/* Objective Rows */}

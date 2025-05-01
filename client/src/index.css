@@ -31,6 +31,9 @@
   --va-note: 60 100% 88%;
   --va-highlight: 187 73% 95%;
   --va-placeholder: 0 0% 55%;
+  
+  /* Layout variables */
+  --header-height: 120px;
 }
 
 .dark {
@@ -155,4 +158,22 @@
   .grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* Sticky header styles */
+header.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.sticky-column-headers {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 30;
+  background-color: white;
+  padding-top: 8px;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
