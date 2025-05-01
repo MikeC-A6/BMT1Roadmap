@@ -1,8 +1,10 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import fetch from "node-fetch";
 import type { Response as NodeFetchResponse } from "node-fetch";
+import { insertRoadmapCardSchema } from "@shared/schema";
+import { z } from "zod";
 
 // GitHub API endpoints
 const GITHUB_API_URL = "https://api.github.com/graphql";
@@ -67,11 +69,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const issues = await fetchGitHubIssuesFromApi();
       // Update the cached issues after successful fetch
       cachedGitHubIssues = issues;
+      
+      // Store issues in the database
+      const issuesToStore = issues.map(issue => ({
+        ...issue,
+        fetched_at: new Date().toISOString()
+      }));
+      await storage.saveGithubIssues(issuesToStore);
+      
       return res.json({ message: "GitHub issues refreshed successfully", count: issues.length });
     } catch (error) {
       console.error("Error refreshing GitHub issues:", error);
       return res.status(500).json({ 
         message: "Failed to refresh GitHub issues"
+      });
+    }
+  });
+  
+  // Roadmap Cards API Endpoints
+  
+  // GET all roadmap cards
+  app.get("/api/roadmap/cards", async (req, res) => {
+    try {
+      const cards = await storage.getAllRoadmapCards();
+      return res.json({ cards });
+    } catch (error) {
+      console.error("Error fetching roadmap cards:", error);
+      return res.status(500).json({
+        message: "Failed to fetch roadmap cards"
+      });
+    }
+  });
+  
+  // GET a single roadmap card
+  app.get("/api/roadmap/cards/:id", async (req, res) => {
+    try {
+      const card = await storage.getRoadmapCard(req.params.id);
+      if (!card) {
+        return res.status(404).json({ message: "Card not found" });
+      }
+      return res.json(card);
+    } catch (error) {
+      console.error("Error fetching roadmap card:", error);
+      return res.status(500).json({
+        message: "Failed to fetch roadmap card"
+      });
+    }
+  });
+  
+  // Create a new roadmap card
+  app.post("/api/roadmap/cards", async (req, res) => {
+    try {
+      // Validate request body
+      const cardData = insertRoadmapCardSchema.parse(req.body);
+      
+      // Create the card
+      const newCard = await storage.createRoadmapCard(cardData);
+      
+      return res.status(201).json(newCard);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid card data", 
+          errors: error.errors 
+        });
+      }
+      
+      console.error("Error creating roadmap card:", error);
+      return res.status(500).json({
+        message: "Failed to create roadmap card"
+      });
+    }
+  });
+  
+  // Update a roadmap card
+  app.patch("/api/roadmap/cards/:id", async (req, res) => {
+    try {
+      const cardId = req.params.id;
+      
+      // Check if card exists
+      const existingCard = await storage.getRoadmapCard(cardId);
+      if (!existingCard) {
+        return res.status(404).json({ message: "Card not found" });
+      }
+      
+      // Validate update data
+      const updateSchema = insertRoadmapCardSchema.partial();
+      const updateData = updateSchema.parse(req.body);
+      
+      // Update the card
+      const updatedCard = await storage.updateRoadmapCard(cardId, updateData);
+      
+      return res.json(updatedCard);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid update data", 
+          errors: error.errors 
+        });
+      }
+      
+      console.error("Error updating roadmap card:", error);
+      return res.status(500).json({
+        message: "Failed to update roadmap card"
+      });
+    }
+  });
+  
+  // Delete a roadmap card
+  app.delete("/api/roadmap/cards/:id", async (req, res) => {
+    try {
+      const cardId = req.params.id;
+      
+      // Check if card exists
+      const existingCard = await storage.getRoadmapCard(cardId);
+      if (!existingCard) {
+        return res.status(404).json({ message: "Card not found" });
+      }
+      
+      // Delete the card
+      const deleted = await storage.deleteRoadmapCard(cardId);
+      
+      if (deleted) {
+        return res.status(204).send();
+      } else {
+        return res.status(500).json({ message: "Failed to delete card" });
+      }
+    } catch (error) {
+      console.error("Error deleting roadmap card:", error);
+      return res.status(500).json({
+        message: "Failed to delete roadmap card"
+      });
+    }
+  });
+  
+  // Save multiple roadmap cards in a single request (for bulk operations)
+  app.post("/api/roadmap/cards/batch", async (req, res) => {
+    try {
+      // Validate request body
+      const batchSchema = z.array(insertRoadmapCardSchema);
+      const cardsData = batchSchema.parse(req.body);
+      
+      // Create cards sequentially
+      const createdCards = [];
+      for (const cardData of cardsData) {
+        const newCard = await storage.createRoadmapCard(cardData);
+        createdCards.push(newCard);
+      }
+      
+      return res.status(201).json({ cards: createdCards });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid batch data", 
+          errors: error.errors 
+        });
+      }
+      
+      console.error("Error creating batch of roadmap cards:", error);
+      return res.status(500).json({
+        message: "Failed to create batch of roadmap cards"
       });
     }
   });
@@ -81,6 +238,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log("Initializing: fetching GitHub issues at startup");
     const initialIssues = await fetchGitHubIssuesFromApi();
     cachedGitHubIssues = initialIssues;
+    
+    // Store issues in the database
+    const issuesToStore = initialIssues.map(issue => ({
+      ...issue,
+      fetched_at: new Date().toISOString()
+    }));
+    
+    await storage.saveGithubIssues(issuesToStore);
     console.log(`Initialization complete: loaded ${initialIssues.length} GitHub issues`);
   } catch (error) {
     console.error("Error pre-loading GitHub issues:", error);
@@ -92,49 +257,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 // Fetch GitHub issues from cache
 async function fetchGitHubIssuesFromCache(): Promise<GitHubIssue[]> {
-  // Return real cached issues if available
-  if (cachedGitHubIssues.length > 0) {
-    return cachedGitHubIssues;
-  }
-
-  // Otherwise return mock data
-  return [
-    { 
-      id: "github-8901", 
-      number: 8901, 
-      title: "Improve claim status notification system", 
-      url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8901",
-      labels: REQUIRED_LABELS
-    },
-    { 
-      id: "github-8902", 
-      number: 8902, 
-      title: "Fix accessibility issues in claim form", 
-      url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8902",
-      labels: REQUIRED_LABELS
-    },
-    { 
-      id: "github-8903", 
-      number: 8903, 
-      title: "Optimize claim document storage", 
-      url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8903",
-      labels: REQUIRED_LABELS
-    },
-    { 
-      id: "github-8904", 
-      number: 8904, 
-      title: "Add support for dependent claims", 
-      url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8904",
-      labels: REQUIRED_LABELS
-    },
-    { 
-      id: "github-8905", 
-      number: 8905, 
-      title: "Implement new VA design system components", 
-      url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8905",
-      labels: REQUIRED_LABELS
+  try {
+    // First, try to get from the database
+    const dbIssues = await storage.getAllGithubIssues();
+    if (dbIssues && dbIssues.length > 0) {
+      return dbIssues.map(issue => ({
+        id: issue.id,
+        number: issue.number,
+        title: issue.title,
+        url: issue.url,
+        labels: issue.labels || []
+      }));
     }
-  ];
+    
+    // If no database entries, check memory cache
+    if (cachedGitHubIssues.length > 0) {
+      return cachedGitHubIssues;
+    }
+
+    // Otherwise return mock data
+    return [
+      { 
+        id: "github-8901", 
+        number: 8901, 
+        title: "Improve claim status notification system", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8901",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8902", 
+        number: 8902, 
+        title: "Fix accessibility issues in claim form", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8902",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8903", 
+        number: 8903, 
+        title: "Optimize claim document storage", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8903",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8904", 
+        number: 8904, 
+        title: "Add support for dependent claims", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8904",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8905", 
+        number: 8905, 
+        title: "Implement new VA design system components", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8905",
+        labels: REQUIRED_LABELS
+      }
+    ];
+  } catch (error) {
+    console.error("Error fetching issues from database:", error);
+    
+    // Fallback to memory cache or mock data
+    if (cachedGitHubIssues.length > 0) {
+      return cachedGitHubIssues;
+    }
+    
+    // Final fallback to mock data
+    return [
+      { 
+        id: "github-8901", 
+        number: 8901, 
+        title: "Improve claim status notification system", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8901",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8902", 
+        number: 8902, 
+        title: "Fix accessibility issues in claim form", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8902",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8903", 
+        number: 8903, 
+        title: "Optimize claim document storage", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8903",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8904", 
+        number: 8904, 
+        title: "Add support for dependent claims", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8904",
+        labels: REQUIRED_LABELS
+      },
+      { 
+        id: "github-8905", 
+        number: 8905, 
+        title: "Implement new VA design system components", 
+        url: "https://github.com/department-of-veterans-affairs/va.gov-team/issues/8905",
+        labels: REQUIRED_LABELS
+      }
+    ];
+  }
 }
 
 // Fetch GitHub issues from API with pagination support
