@@ -91,7 +91,7 @@ async function fetchGitHubIssuesFromCache(): Promise<GitHubIssue[]> {
   ];
 }
 
-// Fetch GitHub issues from API
+// Fetch GitHub issues from API with pagination support
 async function fetchGitHubIssuesFromApi(): Promise<GitHubIssue[]> {
   // Get GitHub token from environment
   const token = process.env.GITHUB_TOKEN;
@@ -101,67 +101,97 @@ async function fetchGitHubIssuesFromApi(): Promise<GitHubIssue[]> {
     return fetchGitHubIssuesFromCache(); // Fallback to cache in dev mode
   }
   
+  let allIssues: GitHubIssue[] = [];
+  let hasNextPage = true;
+  let endCursor: string | null = null;
+  
   try {
     // Construct query with all required labels
     const labelsQuery = REQUIRED_LABELS.map(label => `label:${label}`).join(" ");
-    const query = `
-      query {
-        search(query: "repo:${GITHUB_REPO} is:open ${labelsQuery}", type: ISSUE, first: 100) {
-          edges {
-            node {
-              ... on Issue {
-                id
-                number
-                title
-                url
-                labels(first: 10) {
-                  nodes {
-                    name
+    
+    // Continue fetching with pagination until all results are retrieved
+    while (hasNextPage) {
+      // Add the "after" parameter if we have an endCursor
+      const afterParam = endCursor ? `, after: "${endCursor}"` : '';
+      
+      const query = `
+        query {
+          search(query: "repo:${GITHUB_REPO} is:open ${labelsQuery}", type: ISSUE, first: 100${afterParam}) {
+            edges {
+              node {
+                ... on Issue {
+                  id
+                  number
+                  title
+                  url
+                  labels(first: 10) {
+                    nodes {
+                      name
+                    }
                   }
                 }
               }
             }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
           }
         }
+      `;
+      
+      console.log(`Fetching GitHub issues${endCursor ? ' (paginated)' : ''}`);
+      
+      const response = await fetch(GITHUB_API_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ query })
+      });
+      
+      const data = await response.json();
+      
+      if (data.errors) {
+        console.error("GitHub API returned errors:", data.errors);
+        throw new Error(data.errors[0].message);
       }
-    `;
-    
-    const response = await fetch(GITHUB_API_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ query })
-    });
-    
-    const data = await response.json();
-    
-    if (data.errors) {
-      console.error("GitHub API returned errors:", data.errors);
-      throw new Error(data.errors[0].message);
+      
+      // Transform the response into our GitHubIssue format
+      const issuesFromPage: GitHubIssue[] = data.data.search.edges.map((edge: any) => {
+        const node = edge.node;
+        return {
+          id: `github-${node.number}`,
+          number: node.number,
+          title: node.title,
+          url: node.url,
+          labels: node.labels.nodes.map((label: any) => label.name)
+        };
+      });
+      
+      // Add issues from this page to our collection
+      allIssues = [...allIssues, ...issuesFromPage];
+      
+      // Check if there are more pages
+      hasNextPage = data.data.search.pageInfo.hasNextPage;
+      endCursor = data.data.search.pageInfo.endCursor;
+      
+      // If we've received issues, log the count
+      if (issuesFromPage.length > 0) {
+        console.log(`Received ${issuesFromPage.length} issues${hasNextPage ? ', has more pages' : ''}`);
+      }
+      
+      // Break the loop if there's no next page
+      if (!hasNextPage) break;
     }
     
-    // Transform the response into our GitHubIssue format
-    const issues: GitHubIssue[] = data.data.search.edges.map((edge: any) => {
-      const node = edge.node;
-      return {
-        id: `github-${node.number}`,
-        number: node.number,
-        title: node.title,
-        url: node.url,
-        labels: node.labels.nodes.map((label: any) => label.name)
-      };
-    });
+    console.log(`Total GitHub issues fetched: ${allIssues.length}`);
     
     // In a full implementation, save to cache/database
     // ...
     
-    return issues;
+    return allIssues;
   } catch (error) {
     console.error("Error fetching from GitHub API:", error);
     // Fallback to cache in case of API errors
