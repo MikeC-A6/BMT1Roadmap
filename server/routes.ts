@@ -123,12 +123,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate request body
       const cardData = insertRoadmapCardSchema.parse(req.body);
       
-      // Create the card
-      const newCard = await storage.createRoadmapCard(cardData);
+      // Generate a unique ID for the card
+      const id = `card-${Date.now()}`;
+      
+      // Create the card with the generated ID
+      const newCard = await storage.createRoadmapCard({
+        ...cardData,
+        id
+      });
       
       return res.status(201).json(newCard);
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error("Validation error creating roadmap card:", error.errors);
         return res.status(400).json({ 
           message: "Invalid card data", 
           errors: error.errors 
@@ -206,8 +213,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Save multiple roadmap cards in a single request (for bulk operations)
   app.post("/api/roadmap/cards/batch", async (req, res) => {
     try {
+      // For the batch endpoint, we need to accept the ID
+      const fullCardSchema = z.object({
+        id: z.string(),
+        text: z.string(),
+        location: z.any(),
+        is_accent: z.boolean().optional(),
+        github_number: z.number().optional().nullable(),
+        github_url: z.string().optional().nullable()
+      });
+      
       // Validate request body
-      const batchSchema = z.array(insertRoadmapCardSchema);
+      const batchSchema = z.array(fullCardSchema);
       const cardsData = batchSchema.parse(req.body);
       
       // Create cards sequentially
@@ -220,6 +237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(201).json({ cards: createdCards });
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error("Validation error creating batch of roadmap cards:", error.errors);
         return res.status(400).json({ 
           message: "Invalid batch data", 
           errors: error.errors 

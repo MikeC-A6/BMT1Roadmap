@@ -36,7 +36,8 @@ export const roadmapCards = pgTable("roadmap_cards", {
   github_url: text("github_url"),
 });
 
-export const insertRoadmapCardSchema = createInsertSchema(roadmapCards);
+export const insertRoadmapCardSchema = createInsertSchema(roadmapCards)
+  .omit({ id: true }); // Omit id to allow server to generate it
 
 // Export types
 export type InsertUser = z.infer<typeof insertUserSchema>;

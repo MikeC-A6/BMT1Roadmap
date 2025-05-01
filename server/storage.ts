@@ -53,10 +53,15 @@ export class DatabaseStorage implements IStorage {
     return card;
   }
   
-  async createRoadmapCard(card: InsertRoadmapCard): Promise<RoadmapCard> {
+  async createRoadmapCard(card: InsertRoadmapCard & { id?: string }): Promise<RoadmapCard> {
+    // Ensure the card has an ID
+    const cardWithId = card.id 
+      ? card 
+      : { ...card, id: `card-${Date.now()}` };
+    
     const [newCard] = await db
       .insert(roadmapCards)
-      .values(card)
+      .values(cardWithId as any) // Type assertion needed due to Drizzle types
       .returning();
     return newCard;
   }
