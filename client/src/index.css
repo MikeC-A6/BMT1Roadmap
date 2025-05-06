@@ -91,11 +91,19 @@
   
   .card[data-priority="true"] {
     @apply shadow-md shadow-red-200;
+    position: relative;
   }
   
   .card[data-priority="true"]::before {
     content: "";
-    @apply absolute top-0 left-0 w-full h-1 bg-red-500 rounded-t;
+    position: absolute;
+    top: -2px;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background-color: #ef4444; /* red-500 */
+    border-radius: 2px 2px 0 0;
+    z-index: 10;
   }
   
   .priority-indicator {
