@@ -214,66 +214,48 @@ If `routes.ts` grows significantly, consider splitting it into multiple files ba
 This diagram illustrates the proposed server architecture after refactoring the GitHub integration into a dedicated service.
 
 ```mermaid
-graph TD
-    subgraph ClientApp [Client Application]
-        direction LR
+flowchart TD
+    subgraph ClientApp["Client Application"]
         UI[User Interface]
     end
 
-    subgraph ServerApp [Server (Node.js/Express)]
-        direction TB
-        A[Express App / Middleware (index.ts)] --> B(API Router /routes.ts);
+    subgraph ServerApp["Server (Node.js/Express)"]
+        A[Express App / Middleware (index.ts)] --> B[API Router /routes.ts]
         
-        subgraph RouteHandlers [Route Handlers in routes.ts]
-            direction LR
+        subgraph RouteHandlers["Route Handlers in routes.ts"]
             R_Roadmap[/api/roadmap/*]
             R_GitHub[/api/github/*]
             R_Auth[/api/auth/*]
         end
         
-        B --> R_Roadmap;
-        B --> R_GitHub;
-        B --> R_Auth; 
+        B --> R_Roadmap
+        B --> R_GitHub
+        B --> R_Auth
 
         subgraph Services
-            direction TB
             S_GitHub[GitHub Service (services/githubService.ts)]
-            S_Auth[Auth Service (services/authService.ts - hypothetical)]
+            S_Auth[Auth Service (authService.ts)]
         end
         
         subgraph DataAccess
-            direction TB
-            DA_Storage[Storage Layer (storage.ts / Drizzle ORM)]
+            DA_Storage[Storage Layer (Drizzle ORM)]
         end
 
-        R_Roadmap --> DA_Storage;
-        R_GitHub --> S_GitHub;
-        R_Auth --> S_Auth; 
-        S_Auth --> DA_Storage; 
-
-        S_GitHub --> DA_Storage; %% For caching GitHub issues in DB
-        
+        R_Roadmap --> DA_Storage
+        R_GitHub --> S_GitHub
+        R_Auth --> S_Auth
+        S_Auth --> DA_Storage
+        S_GitHub --> DA_Storage
     end
 
-    subgraph ExternalServices
-        direction TB
+    subgraph ExternalServices["External Services"]
         Ext_GitHub[GitHub API]
         Ext_DB[(PostgreSQL / NeonDB)]
     end
 
-    UI -- HTTP Requests --> A;
-    S_GitHub -- API Calls --> Ext_GitHub;
-    DA_Storage -- SQL --> Ext_DB;
-
-    classDef internal fill:#ddeeff,stroke:#333,stroke-width:2px;
-    classDef external fill:#ffeedd,stroke:#333,stroke-width:2px;
-    classDef service fill:#e6ffe6,stroke:#333,stroke-width:2px;
-
-    class A,B,R_Roadmap,R_GitHub,R_Auth internal;
-    class S_GitHub,S_Auth service;
-    class DA_Storage internal;
-    class Ext_GitHub,Ext_DB external;
-    class UI internal;
+    UI --> A
+    S_GitHub --> Ext_GitHub
+    DA_Storage --> Ext_DB
 ```
 
 This diagram shows:
