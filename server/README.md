@@ -216,16 +216,16 @@ This diagram illustrates the proposed server architecture after refactoring the 
 ```mermaid
 flowchart TD
     subgraph ClientApp["Client Application"]
-        UI[User Interface]
+        UI["User Interface"]
     end
 
     subgraph ServerApp["Server (Node.js/Express)"]
-        A[Express App / Middleware (index.ts)] --> B[API Router /routes.ts]
+        A["Express App / Middleware (index.ts)"] --> B["API Router /routes.ts"]
         
         subgraph RouteHandlers["Route Handlers in routes.ts"]
-            R_Roadmap[/api/roadmap/*]
-            R_GitHub[/api/github/*]
-            R_Auth[/api/auth/*]
+            R_Roadmap["/api/roadmap/*"]
+            R_GitHub["/api/github/*"]
+            R_Auth["/api/auth/*"]
         end
         
         B --> R_Roadmap
@@ -233,12 +233,12 @@ flowchart TD
         B --> R_Auth
 
         subgraph Services
-            S_GitHub[GitHub Service (services/githubService.ts)]
-            S_Auth[Auth Service (authService.ts)]
+            S_GitHub["GitHub Service (services/githubService.ts)"]
+            S_Auth["Auth Service (authService.ts)"]
         end
         
         subgraph DataAccess
-            DA_Storage[Storage Layer (Drizzle ORM)]
+            DA_Storage["Storage Layer (Drizzle ORM)"]
         end
 
         R_Roadmap --> DA_Storage
@@ -249,8 +249,8 @@ flowchart TD
     end
 
     subgraph ExternalServices["External Services"]
-        Ext_GitHub[GitHub API]
-        Ext_DB[(PostgreSQL / NeonDB)]
+        Ext_GitHub["GitHub API"]
+        Ext_DB["PostgreSQL / NeonDB"]
     end
 
     UI --> A
