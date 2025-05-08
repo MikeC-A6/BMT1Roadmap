@@ -11,20 +11,20 @@ The application is structured into three main parts:
 *   **Shared**: A directory containing shared code, primarily database schemas and Zod validation schemas, ensuring type safety and consistency between the client and server.
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph Browser
-        Client[React Client (Vite)]
+        Client["React Client (Vite)"]
     end
 
-    subgraph Server Infrastructure
-        APIServer[Node.js/Express Server]
-        DB[(NeonDB/PostgreSQL)]
-        GitHubAPI[GitHub API]
+    subgraph ServerInfrastructure["Server Infrastructure"]
+        APIServer["Node.js/Express Server"]
+        DB["NeonDB/PostgreSQL"]
+        GitHubAPI["GitHub API"]
     end
 
-    Client -- HTTP/API Calls --> APIServer;
-    APIServer -- Drizzle ORM --> DB;
-    APIServer -- REST/GraphQL --> GitHubAPI;
+    Client -->|HTTP/API Calls| APIServer
+    APIServer -->|Drizzle ORM| DB
+    APIServer -->|REST/GraphQL| GitHubAPI
 ```
 
 ## Prerequisites
