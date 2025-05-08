@@ -1,5 +1,5 @@
 import { GitHubIssue, RoadmapCard, CardLocation } from "@/types";
-import Cell from "@/components/Cell";
+import Cell from "@/components/cell";
 import UncategorizedSection from "@/components/UncategorizedSection";
 import { useRoadmapBoard } from "@/hooks/useRoadmapBoard";
 import { objectives } from "@/config/roadmap";
