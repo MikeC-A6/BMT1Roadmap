@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { initGitHubService } from "./services/githubService";
+import { storage } from "./storage";
 
 const app = express();
 app.use(express.json());
@@ -35,6 +37,16 @@ app.use((req, res, next) => {
 
   next();
 });
+
+const repo = process.env.GITHUB_REPO || "department-of-veterans-affairs/va.gov-team";
+const [repoOwner, repoName] = repo.split("/");
+initGitHubService(
+  process.env.GITHUB_TOKEN || "",
+  repoOwner,
+  repoName,
+  ["benefits-management-tools", "bmt-2025", "bmt-team-1"],
+  storage
+);
 
 (async () => {
   const server = await registerRoutes(app);
